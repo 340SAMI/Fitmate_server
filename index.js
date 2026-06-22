@@ -1,12 +1,16 @@
 const express = require('express');
-const app = express()
-const port = 5000
-const env = require('dotenv').config()
+const cors = require('cors');
+const app = express();
+const port = 5000;
+require('dotenv').config();
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
+app.use(cors());
+app.use(express.json());
+
 app.get('/', (req, res) => {
-  res.send('Hello World!')
-})
+  res.send('Hello World!');
+});
 
 
 
@@ -27,10 +31,26 @@ async function run() {
     await client.connect();
 
 
-    const database = client.db('feetmate')
+    const database = client.db('feetmate');
+    const classCollections = database.collection('classes');
+
+    app.post('/api/classes', async (req, res) => {
+      try {
+        const newClass = req.body;
+        if (!newClass) {
+          return res.status(400).json({ error: 'Class data is required' });
+        }
+
+        const result = await classCollections.insertOne(newClass);
+        res.status(201).json({ message: 'Class created', id: result.insertedId });
+      } catch (error) {
+        console.error('Failed to create class:', error);
+        res.status(500).json({ error: 'Failed to create class' });
+      }
+    });
 
 
-    await client.db("admin").command({ ping: 1 });
+    await client.db('admin').command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
