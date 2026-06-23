@@ -74,6 +74,42 @@ async function run() {
       }
     });
 
+    app.get('/api/classes/popular', async (req, res)=>{
+
+      try{
+        const classes = await classCollections.aggregate([
+          
+          {
+            $match: { 
+              status: "approved",
+              bookingCount: { $gt: 0 }
+            }
+          },
+          
+          { $sort: { bookingCount: -1 }},
+          
+          { $limit: 6 },
+          
+          {
+            $project: {
+                className: 1,
+                image: 1,
+                category: 1,
+                bookingCount: 1,
+                price: 1
+            }
+          }
+        ]).toArray();
+
+        res.send(classes);
+
+      }catch(error){
+        res.status(500).send({ error: "Failed" });
+      }
+
+
+    })
+
 
     await client.db('admin').command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
