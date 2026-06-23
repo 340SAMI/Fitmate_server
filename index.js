@@ -33,7 +33,7 @@ async function run() {
 
     const database = client.db('feetmate');
     const classCollections = database.collection('classes');
-
+//class related
     app.post('/api/classes', async (req, res) => {
       try {
         const newClass = req.body;
@@ -46,6 +46,31 @@ async function run() {
       } catch (error) {
         console.error('Failed to create class:', error);
         res.status(500).json({ error: 'Failed to create class' });
+      }
+    });
+
+    app.get('/api/classes', async (req, res) => {
+      try {
+        const { search, category } = req.query;
+
+        const query = { status: "approved" };
+
+        if (search) {
+          query.className = { $regex: search, $options: 'i' };
+        }
+
+        if (category && category !== 'all') {
+          query.category = category;
+        }
+
+        const classes = await classCollections.find(query).toArray();
+
+        res.json({ classes, total: classes.length});
+    
+
+      } catch (error) {
+        console.error('Failed to fetch classes:', error);
+        res.status(500).json({ error: 'Failed to fetch classes' });
       }
     });
 
