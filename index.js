@@ -33,6 +33,7 @@ async function run() {
 
     const database = client.db('feetmate');
     const classCollections = database.collection('classes');
+    const forumCollection = database.collection('forums');
 //class related
     app.post('/api/classes', async (req, res) => {
       try {
@@ -96,7 +97,8 @@ async function run() {
                 image: 1,
                 category: 1,
                 bookingCount: 1,
-                price: 1
+                price: 1,
+                trainerName:1
             }
           }
         ]).toArray();
@@ -109,6 +111,23 @@ async function run() {
 
 
     })
+
+    //forum apis
+
+      app.post('/api/forum', async (req, res) => {
+          try {
+            const newForum = req.body;
+            if (!newForum || Object.keys(newForum).length === 0) {
+              return res.status(400).json({ error: 'Class data is required' });
+            }
+
+            const result = await forumCollection.insertOne(newForum);
+            res.status(201).json({ message: 'forum created', id: result.insertedId });
+          } catch (error) {
+            console.error('Failed to create forum:', error);
+            res.status(500).json({ error: 'Failed to create forum' });
+          }
+        });
 
 
     await client.db('admin').command({ ping: 1 });
