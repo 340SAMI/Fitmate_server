@@ -3,7 +3,7 @@ const cors = require('cors');
 const app = express();
 const port = 5000;
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 app.use(cors());
 app.use(express.json());
@@ -66,7 +66,7 @@ async function run() {
 
         const classes = await classCollections.find(query).toArray();
 
-        res.json({ classes, total: classes.length});
+        res.json(classes);
     
 
       } catch (error) {
@@ -112,6 +112,26 @@ async function run() {
 
     })
 
+      app.get('/api/classes/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        const query = {
+          _id: new ObjectId(id)
+        };
+
+        const result = await classCollections.findOne(query);
+
+        res.json(result)
+
+      } catch (error) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid ID'
+        });
+      }
+    });
+
     //forum apis
 
       app.post('/api/forum', async (req, res) => {
@@ -134,15 +154,28 @@ async function run() {
             const { authorId } = req.query; //req.query.authorId
 
             const query = {};
-            if (authorId) query.authorId = authorId;
+            if (authorId){
+              query.authorId = authorId;
+            } 
 
             const posts = await forumCollection.find(query).sort({ createdAt: -1 }).toArray();
-            res.json({ posts, total: posts.length });
+            res.json(posts);
           } catch (error) {
             console.error('Failed to fetch forum posts:', error);
             res.status(500).json({ error: 'Failed to fetch forum posts' });
           }
         });
+
+          app.delete('/api/forum/:id', async (req, res) => {
+            try {
+              
+              const result = await forumCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+              if (result.deletedCount === 0) return res.status(404).json({ error: 'Post not found' });
+              res.json({ message: 'Post deleted' });
+            } catch (error) {
+              res.status(500).json({ error: 'Failed to delete post' });
+            }
+          });
 
 
     await client.db('admin').command({ ping: 1 });
