@@ -9,12 +9,12 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.send('Hello World!');
+  res.json({ message: 'FeetMate API is running', status: 'ok' });
 });
 
 
 
-const uri =process.env.MONGO_DB_URI;
+const uri = process.env.MONGO_DB_URI;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -38,7 +38,7 @@ async function run() {
     app.post('/api/classes', async (req, res) => {
       try {
         const newClass = req.body;
-        if (!newClass) {
+        if (!newClass || Object.keys(newClass).length === 0) {
           return res.status(400).json({ error: 'Class data is required' });
         }
 
@@ -103,10 +103,10 @@ async function run() {
           }
         ]).toArray();
 
-        res.send(classes);
+        res.json(classes);
 
-      }catch(error){
-        res.status(500).send({ error: "Failed" });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch popular classes' });
       }
 
 
@@ -118,7 +118,7 @@ async function run() {
           try {
             const newForum = req.body;
             if (!newForum || Object.keys(newForum).length === 0) {
-              return res.status(400).json({ error: 'Class data is required' });
+              return res.status(400).json({ error: 'Forum data is required' });
             }
 
             const result = await forumCollection.insertOne(newForum);
@@ -126,6 +126,21 @@ async function run() {
           } catch (error) {
             console.error('Failed to create forum:', error);
             res.status(500).json({ error: 'Failed to create forum' });
+          }
+        });
+                      //this one detects id and give their own forums
+        app.get('/api/forum', async (req, res) => {
+          try {
+            const { authorId } = req.query; //req.query.authorId
+
+            const query = {};
+            if (authorId) query.authorId = authorId;
+
+            const posts = await forumCollection.find(query).sort({ createdAt: -1 }).toArray();
+            res.json({ posts, total: posts.length });
+          } catch (error) {
+            console.error('Failed to fetch forum posts:', error);
+            res.status(500).json({ error: 'Failed to fetch forum posts' });
           }
         });
 
