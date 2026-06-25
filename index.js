@@ -34,6 +34,8 @@ async function run() {
     const database = client.db('feetmate');
     const classCollections = database.collection('classes');
     const forumCollection = database.collection('forums');
+    const purchaseCollection = database.collection('purchases');
+    const favoriteCollection = database.collection("favorites")
 //class related
     app.post('/api/classes', async (req, res) => {
       try {
@@ -66,7 +68,7 @@ async function run() {
 
         const classes = await classCollections.find(query).toArray();
 
-        res.json(classes);
+        res.json({classes, total:classes.length});
     
 
       } catch (error) {
@@ -159,7 +161,7 @@ async function run() {
             } 
 
             const posts = await forumCollection.find(query).sort({ createdAt: -1 }).toArray();
-            res.json(posts);
+            res.json({posts, total:posts.length});
           } catch (error) {
             console.error('Failed to fetch forum posts:', error);
             res.status(500).json({ error: 'Failed to fetch forum posts' });
@@ -177,6 +179,72 @@ async function run() {
             }
           });
 
+
+          //purchase 
+
+          app.post('/api/purchases', async (req, res) => {
+            try {
+              const purchaseData = req.body;
+
+              if (!purchaseData || Object.keys(purchaseData).length === 0) {
+                return res.status(400).json({ error: 'Purchase data is required' });
+              }
+
+              const purchaseDoc = {
+                ...purchaseData,
+                createdAt: new Date()
+              };
+
+              const result = await purchaseCollection.insertOne(purchaseDoc);
+
+              if (ObjectId.isValid(purchaseDoc.classId)) {
+                await classCollections.updateOne(
+                  { _id: new ObjectId(purchaseDoc.classId) },
+                  { $inc: { bookingCount: 1 } }
+                );
+              }
+
+              res.status(201).json(purchaseDoc);
+            } catch (error) {
+              console.error('Failed to create purchase:', error);
+              res.status(500).json({ error: 'Failed to create purchase' });
+            }
+          });
+
+          app.get('/api/purchases', async (req, res) => {
+            try {
+              const { userId, userEmail } = req.query;
+              const query = {};
+
+              if (userId) query.userId = userId;
+              if (userEmail) query.userEmail = userEmail;
+
+              const purchases = await purchaseCollection.find(query).sort({ createdAt: -1 }).toArray();
+
+              res.json({ purchases, total: purchases.length });
+            } catch (error) {
+              console.error('Failed to fetch purchases:', error);
+              res.status(500).json({ error: 'Failed to fetch purchases' });
+            }
+          });
+
+          app.post('/api/favorites', async (req, res)=>{
+            try{
+              const favoriteData = req.body;
+
+              if (!favoriteData || Object.keys(favoriteData).length === 0) {
+                return res.status(400).json({ error: 'Purchase data is required' });
+              }
+
+              const result = await favoriteCollection.insertOne(favoriteData);
+
+              res.json(favoriteData);
+
+            } catch (error) {
+              console.error('Failed to load', error);
+              res.status(500).json({ error: 'Failed to load' });
+            }
+          })
 
     await client.db('admin').command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
