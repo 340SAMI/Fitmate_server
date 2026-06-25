@@ -213,11 +213,16 @@ async function run() {
 
           app.get('/api/purchases', async (req, res) => {
             try {
-              const { userId, userEmail } = req.query;
+              const { userId, classId} = req.query;
               const query = {};
 
-              if (userId) query.userId = userId;
-              if (userEmail) query.userEmail = userEmail;
+              if (userId){
+                query.userId = userId;
+              } 
+
+              if(classId){
+                query.classId = classId
+              }         
 
               const purchases = await purchaseCollection.find(query).sort({ createdAt: -1 }).toArray();
 
@@ -228,23 +233,108 @@ async function run() {
             }
           });
 
-          app.post('/api/favorites', async (req, res)=>{
-            try{
-              const favoriteData = req.body;
 
-              if (!favoriteData || Object.keys(favoriteData).length === 0) {
-                return res.status(400).json({ error: 'Purchase data is required' });
+          app.get('/api/purchases/check', async (req, res) => {
+
+            const { userId, classId } = req.query;
+
+            const purchase = await purchaseCollection.findOne({
+              userId,
+              classId
+            });
+
+            res.json({
+              booked: !!purchase
+            });
+          });
+
+            // favorites
+            app.post('/api/favorites', async (req, res) => {
+              try {
+                const favoriteData = req.body;
+
+                if (!favoriteData || Object.keys(favoriteData).length === 0) {
+                  return res.status(400).json({
+                    error: 'Favorite data is required'
+                  });
+                }
+
+                const { classId, userId } = favoriteData;
+
+                const existingFavorite = await favoriteCollection.findOne({
+                  classId,  
+                  userId
+                });
+
+                if (existingFavorite) {
+                  return res.status(409).json({
+                    message: 'Class already added to favorites'
+                  });
+                }
+
+                const result = await favoriteCollection.insertOne({
+                  ...favoriteData,
+                  createdAt: new Date()
+                });
+
+                res.status(201).json(result);
+
+              } catch (error) {
+                console.error('Failed to add favorite:', error);
+                res.status(500).json({
+                  error: 'Failed to add favorite'
+                });
+              }
+            });
+
+          app.get('/api/favorites', async (req, res)=>{
+            try{
+              const {userId, classId} = req.query;
+              const query = {}
+              if(userId){
+                query.userId = userId;
+              }
+              if(classId){
+                query.classId = classId;
               }
 
-              const result = await favoriteCollection.insertOne(favoriteData);
+              const favorites = await favoriteCollection.find(query).toArray();
 
-              res.json(favoriteData);
-
-            } catch (error) {
-              console.error('Failed to load', error);
-              res.status(500).json({ error: 'Failed to load' });
+              res.json({
+                favorites,
+                total: favorites.length
+              });
+            }catch(err){
+                  console.error('Failed to get favorite:', err);
+                  res.status(500).json({
+                      error: 'Failed to get favorite'
+                   });
             }
           })
+
+          app.delete('/api/favorites', async (req, res) => {
+            try {
+
+              const { userId, classId } = req.query;
+
+              const result = await favoriteCollection.deleteOne({
+                userId,
+                classId
+              });
+
+              res.json(result);
+
+            } catch (err) {
+
+              console.error('Failed to delete favorite:', err);
+
+              res.status(500).json({
+                error: 'Failed to delete favorite'
+              });
+
+            }
+          });
+          
 
     await client.db('admin').command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
