@@ -54,9 +54,9 @@ async function run() {
 
     app.get('/api/classes', async (req, res) => {
       try {
-        const { search, category } = req.query;
+        const { search, category, trainerId } = req.query;
 
-        const query = { status: "approved" };
+        const query = {};
 
         if (search) {
           query.className = { $regex: search, $options: 'i' };
@@ -64,6 +64,12 @@ async function run() {
 
         if (category && category !== 'all') {
           query.category = category;
+        }
+
+        if(trainerId){
+          query.trainerId = trainerId;
+        }else{
+          query.status="approved" ;
         }
 
         const classes = await classCollections.find(query).toArray();
@@ -134,6 +140,45 @@ async function run() {
       }
     });
 
+    app.patch('/api/classes/:id', async (req, res) => {
+      try {
+        const { id } = req.params;
+        const updates = req.body;
+        delete updates._id; // so imgonna use it remove _id from updates
+
+        const result = await classCollections.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updates }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ error: 'Class not found' });
+        }
+
+        res.json({ message: 'Class updated' });
+      } catch(err) {
+        console.error(err)
+        res.status(500).json({ message: err.message });
+      }
+    });
+
+    app.delete('/api/classes/:id', async (req, res) => {
+      try {
+        const result = await classCollections.deleteOne({
+          _id: new ObjectId(req.params.id)
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ error: 'Class not found' });
+        }
+
+        res.json({ message: 'Class deleted' });
+      } catch(err) {
+        console.error(err)
+        res.status(500).json({ message: err.message });
+      }
+    });
+
     //forum apis
 
       app.post('/api/forum', async (req, res) => {
@@ -167,6 +212,27 @@ async function run() {
             res.status(500).json({ error: 'Failed to fetch forum posts' });
           }
         });
+          app.get('/api/forum/:id', async (req, res) => {
+            try {
+              const { id } = req.params;
+
+              console.log("Valid:", ObjectId.isValid(id));
+
+              const result = await forumCollection.findOne({
+                _id: new ObjectId(id)
+              });
+
+              console.log("Result:", result);
+
+              res.json(result);
+
+            } catch (error) {
+              console.error(error); 
+              res.status(400).json({
+                message: "Invalid ID"
+              });
+            }
+          });
 
           app.delete('/api/forum/:id', async (req, res) => {
             try {
@@ -178,6 +244,99 @@ async function run() {
               res.status(500).json({ error: 'Failed to delete post' });
             }
           });
+
+          //forum detail page
+
+            // PATCH like
+            app.patch('/api/forum/:id/like', async (req, res) => {
+              try {
+                const { userId } = req.body;
+                const post = await forumCollection.findOne({ _id: new ObjectId(req.params.id) });
+                if (!post) return res.status(404).json({ error: 'Post not found' });
+
+                const alreadyLiked = post.likes?.includes(userId);
+                const update = alreadyLiked
+                  ? { $pull: { likes: userId } }                          // unlike
+                  : { $addToSet: { likes: userId }, $pull: { dislikes: userId } }; // like + remove dislike
+
+                await forumCollection.updateOne({ _id: new ObjectId(req.params.id) }, update);
+                res.json({ liked: !alreadyLiked });
+              } catch (error) {
+                res.status(500).json({ error: 'Failed to update like' });
+              }
+            });
+
+            // PATCH dislike
+            app.patch('/api/forum/:id/dislike', async (req, res) => {
+              try {
+                const { userId } = req.body;
+                const post = await forumCollection.findOne({ _id: new ObjectId(req.params.id) });
+                if (!post) return res.status(404).json({ error: 'Post not found' });
+
+                const alreadyDisliked = post.dislikes?.includes(userId);
+                const update = alreadyDisliked
+                  ? { $pull: { dislikes: userId } }                              // un-dislike
+                  : { $addToSet: { dislikes: userId }, $pull: { likes: userId } }; // dislike + remove like
+
+                await forumCollection.updateOne({ _id: new ObjectId(req.params.id) }, update);
+                res.json({ disliked: !alreadyDisliked });
+              } catch (error) {
+                res.status(500).json({ error: 'Failed to update dislike' });
+              }
+            });
+
+            // PATCH add comment
+            app.patch('/api/forum/:id/comment', async (req, res) => {
+              try {
+                const { userId, userName, userImage, text } = req.body;
+                if (!text?.trim()) return res.status(400).json({ error: 'Comment text is required' });
+
+                const comment = {
+                  _id: new ObjectId().toString(),
+                  userId,
+                  userName,
+                  userImage,
+                  text,
+                  createdAt: new Date(),
+                };
+
+                await forumCollection.updateOne(
+                  { _id: new ObjectId(req.params.id) },
+                  { $push: { comments: comment } }
+                );
+                res.status(201).json(comment);
+              } catch (error) {
+                res.status(500).json({ error: 'Failed to add comment' });
+              }
+            });
+
+            // PATCH edit comment
+            app.patch('/api/forum/:id/comment/:commentId', async (req, res) => {
+              try {
+                const { text, userId } = req.body;
+                await forumCollection.updateOne(
+                  { _id: new ObjectId(req.params.id), 'comments._id': req.params.commentId, 'comments.userId': userId },
+                  { $set: { 'comments.$.text': text, 'comments.$.editedAt': new Date() } }
+                );
+                res.json({ message: 'Comment updated' });
+              } catch (error) {
+                res.status(500).json({ error: 'Failed to edit comment' });
+              }
+            });
+
+            // DELETE comment
+            app.delete('/api/forum/:id/comment/:commentId', async (req, res) => {
+              try {
+                const { userId } = req.body;
+                await forumCollection.updateOne(
+                  { _id: new ObjectId(req.params.id) },
+                  { $pull: { comments: { _id: req.params.commentId, userId } } }
+                );
+                res.json({ message: 'Comment deleted' });
+              } catch (error) {
+                res.status(500).json({ error: 'Failed to delete comment' });
+              }
+            });
 
 
           //purchase 
@@ -334,7 +493,29 @@ async function run() {
 
             }
           });
-          
+
+
+          //trainer detail
+
+          app.get('/api/trainer/stats/:trainerId', async (req, res) => {
+            try {
+              const { trainerId } = req.params;
+
+              const classes = await classCollections
+                .find({ trainerId })
+                .toArray();
+
+              const totalClasses  = classes.length;
+              const totalEnrolled = classes.reduce(
+                (sum, c) => sum + (c.bookingCount ?? 0), 0
+              );
+
+              res.json({ totalClasses, totalEnrolled });
+            } catch {
+              res.status(500).json({ error: 'Failed to fetch stats' });
+            }
+          });
+
 
     await client.db('admin').command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
