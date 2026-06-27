@@ -35,7 +35,8 @@ async function run() {
     const classCollections = database.collection('classes');
     const forumCollection = database.collection('forums');
     const purchaseCollection = database.collection('purchases');
-    const favoriteCollection = database.collection("favorites")
+    const favoriteCollection = database.collection("favorites");
+    const userCollection= database.collection("user")
 //class related
     app.post('/api/classes', async (req, res) => {
       try {
@@ -495,7 +496,7 @@ async function run() {
           });
 
 
-          //trainer detail
+          //STATS SECTION
 
           app.get('/api/trainer/stats/:trainerId', async (req, res) => {
             try {
@@ -515,6 +516,80 @@ async function run() {
               res.status(500).json({ error: 'Failed to fetch stats' });
             }
           });
+
+            app.get("/api/admin/stats/:adminId", async (req, res) => {
+              try {
+                const { adminId } = req.params;
+
+
+                const [totalUsers, totalClasses, totalBookings] = await Promise.all([
+                  userCollection.countDocuments(),
+                  classCollections.countDocuments(),
+                  purchaseCollection .countDocuments(),
+                ]);
+
+                res.send({
+                  success: true,
+                  totalUsers,
+                  totalClasses,
+                  totalBookings,
+                });
+              } catch (err) {
+                console.error(err);
+
+                res.status(500).send({
+                  success: false,
+                  message: err.message,
+                });
+              }
+            });
+
+          //admin part
+
+          app.get('/api/admin/users', async (req, res) => {
+            try {
+              const { search } = req.query;
+              const filter = search
+                ? { $or: [
+                    { name: { $regex: search, $options: 'i' } },
+                    { email: { $regex: search, $options: 'i' } }
+                  ]}
+                : {};
+              const users = await userCollection.find(filter).toArray();
+              res.json(users);
+            } catch (err) {
+              console.error(err);
+              res.status(500).json({ error: err.message });
+            }
+          });
+
+
+            // Block / Unblock / Make Admin
+            app.patch('/api/admin/users/:id', async (req, res) => {
+              try {
+                const { action } = req.body;
+
+                const updates = {
+                  block: { status: 'blocked' },
+                  unblock: { status: 'active' },
+                  makeAdmin: { role: 'admin' },
+                  demote: { role: 'user' },
+                };
+
+                if (!updates[action]) {
+                  return res.status(400).json({ success: false, error: 'Invalid action' });
+                }
+
+                await userCollection.updateOne(
+                  { _id: new ObjectId(req.params.id) },
+                  { $set: updates[action] }
+                );
+
+                res.json({ success: true });
+              } catch (err) {
+                res.status(500).json({ success: false, error: err.message });
+              }
+            });
 
 
     await client.db('admin').command({ ping: 1 });
