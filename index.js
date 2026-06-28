@@ -55,7 +55,7 @@ async function run() {
 
     app.get('/api/classes', async (req, res) => {
       try {
-        const { search, category, trainerId } = req.query;
+        const { search, category, trainerId, isAdmin, status } = req.query;
 
         const query = {};
 
@@ -67,19 +67,22 @@ async function run() {
           query.category = category;
         }
 
-        if(trainerId){
-          query.trainerId = trainerId;
-        }else{
-          query.status="approved" ;
+        if (trainerId) {
+          query.trainerId = trainerId;          // trainer sees only their classes
+        } else if (!isAdmin) {
+          query.status = 'approved';            // public sees only approved
+        }
+        // admin: no trainerId, isAdmin=true → no status filter, sees everything
+
+        // optional: admin can filter by status via dropdown
+        if (isAdmin && status && status !== 'all') {
+          query.status = status;
         }
 
         const classes = await classCollections.find(query).toArray();
-
-        res.json({classes, total:classes.length});
-    
+        res.json({ classes, total: classes.length });
 
       } catch (error) {
-        console.error('Failed to fetch classes:', error);
         res.status(500).json({ error: 'Failed to fetch classes' });
       }
     });
@@ -144,8 +147,13 @@ async function run() {
     app.patch('/api/classes/:id', async (req, res) => {
       try {
         const { id } = req.params;
+        const { isAdmin } = req.query;  // ?isAdmin=true from frontend
         const updates = req.body;
-        delete updates._id; // so imgonna use it remove _id from updates
+        delete updates._id;
+
+        if (updates.status && !isAdmin) {
+          delete updates.status;
+        }
 
         const result = await classCollections.updateOne(
           { _id: new ObjectId(id) },
@@ -157,8 +165,8 @@ async function run() {
         }
 
         res.json({ message: 'Class updated' });
-      } catch(err) {
-        console.error(err)
+      } catch (err) {
+        console.error(err);
         res.status(500).json({ message: err.message });
       }
     });
@@ -548,13 +556,18 @@ async function run() {
 
           app.get('/api/admin/users', async (req, res) => {
             try {
-              const { search } = req.query;
-              const filter = search
-                ? { $or: [
-                    { name: { $regex: search, $options: 'i' } },
-                    { email: { $regex: search, $options: 'i' } }
-                  ]}
-                : {};
+              const { search, role } = req.query;
+              const filter = {};
+
+              if (role) filter.role = role;
+
+              if (search) {
+                filter.$or = [
+                  { name: { $regex: search, $options: 'i' } },
+                  { email: { $regex: search, $options: 'i' } }
+                ];
+              }
+
               const users = await userCollection.find(filter).toArray();
               res.json(users);
             } catch (err) {
