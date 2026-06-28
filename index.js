@@ -207,20 +207,25 @@ async function run() {
                       //this one detects id and give their own forums
         app.get('/api/forum', async (req, res) => {
           try {
-            const { authorId } = req.query; //req.query.authorId
-
+            const { search, authorId } = req.query;
             const query = {};
-            if (authorId){
-              query.authorId = authorId;
-            } 
+
+            if (authorId) query.authorId = authorId;
+            if (search) {
+              query.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } },
+                { authorName: { $regex: search, $options: 'i' } },
+              ];
+            }
 
             const posts = await forumCollection.find(query).sort({ createdAt: -1 }).toArray();
-            res.json({posts, total:posts.length});
+            res.json({ posts, total: posts.length });
           } catch (error) {
-            console.error('Failed to fetch forum posts:', error);
-            res.status(500).json({ error: 'Failed to fetch forum posts' });
+            res.status(500).json({ error: 'Failed to fetch posts' });
           }
         });
+
           app.get('/api/forum/:id', async (req, res) => {
             try {
               const { id } = req.params;
@@ -379,27 +384,26 @@ async function run() {
             }
           });
 
-          app.get('/api/purchases', async (req, res) => {
-            try {
-              const { userId, classId} = req.query;
-              const query = {};
+        app.get('/api/purchases', async (req, res) => {
+          try {
+            const { userId, classId, search } = req.query;
+            const query = {};
 
-              if (userId){
-                query.userId = userId;
-              } 
-
-              if(classId){
-                query.classId = classId
-              }         
-
-              const purchases = await purchaseCollection.find(query).sort({ createdAt: -1 }).toArray();
-
-              res.json({ purchases, total: purchases.length });
-            } catch (error) {
-              console.error('Failed to fetch purchases:', error);
-              res.status(500).json({ error: 'Failed to fetch purchases' });
+            if (userId) query.userId = userId;
+            if (classId) query.classId = classId;
+            if (search) {
+              query.$or = [
+                { userEmail: { $regex: search, $options: 'i' } },
+                { name:      { $regex: search, $options: 'i' } },
+              ];
             }
-          });
+
+            const purchases = await purchaseCollection.find(query).sort({ createdAt: -1 }).toArray();
+            res.json({ purchases, total: purchases.length });
+          } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch purchases' });
+          }
+        });
 
 
           app.get('/api/purchases/check', async (req, res) => {
@@ -551,6 +555,29 @@ async function run() {
                 });
               }
             });
+
+          app.get('/api/user/stats/:userId', async (req, res) => {
+            try {
+              const { userId } = req.params;
+
+              const [totalBooked, totalFavorites] = await Promise.all([
+                purchaseCollection.countDocuments({ userId }),
+                favoriteCollection.countDocuments({ userId }),
+              ]);
+
+              res.json({
+                success: true,
+                totalBooked,
+                totalFavorites,
+              });
+            } catch (err) {
+              console.error(err);
+              res.status(500).json({
+                success: false,
+                message: err.message,
+              });
+            }
+          });            
 
           //admin part
 
