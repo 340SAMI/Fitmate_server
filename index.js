@@ -303,67 +303,83 @@ async function run() {
           //forum detail page
 
             // PATCH like
-            app.patch('/api/forum/:id/like', async (req, res) => {
-              try {
-                const { userId } = req.body;
-                const post = await forumCollection.findOne({ _id: new ObjectId(req.params.id) });
-                if (!post) return res.status(404).json({ error: 'Post not found' });
+          app.patch('/api/forum/:id/like', async (req, res) => {
+            try {
+              const { userId } = req.body;
 
-                const alreadyLiked = post.likes?.includes(userId);
-                const update = alreadyLiked
-                  ? { $pull: { likes: userId } }                          // unlike
-                  : { $addToSet: { likes: userId }, $pull: { dislikes: userId } }; // like + remove dislike
+              // Check user status
+              const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+              if (!user) return res.status(404).json({ error: 'User not found' });
+              if (user.status !== 'active') return res.status(403).json({ error: 'Your account Has been Restricted by Admin' });
 
-                await forumCollection.updateOne({ _id: new ObjectId(req.params.id) }, update);
-                res.json({ liked: !alreadyLiked });
-              } catch (error) {
-                res.status(500).json({ error: 'Failed to update like' });
-              }
-            });
+              const post = await forumCollection.findOne({ _id: new ObjectId(req.params.id) });
+              if (!post) return res.status(404).json({ error: 'Post not found' });
+
+              const alreadyLiked = post.likes?.includes(userId);
+              const update = alreadyLiked
+                ? { $pull: { likes: userId } }
+                : { $addToSet: { likes: userId }, $pull: { dislikes: userId } };
+
+              await forumCollection.updateOne({ _id: new ObjectId(req.params.id) }, update);
+              res.json({ liked: !alreadyLiked });
+            } catch (error) {
+              res.status(500).json({ error: 'Failed to update like' });
+            }
+          });
 
             // PATCH dislike
-            app.patch('/api/forum/:id/dislike', async (req, res) => {
-              try {
-                const { userId } = req.body;
-                const post = await forumCollection.findOne({ _id: new ObjectId(req.params.id) });
-                if (!post) return res.status(404).json({ error: 'Post not found' });
+          app.patch('/api/forum/:id/dislike', async (req, res) => {
+            try {
+              const { userId } = req.body;
 
-                const alreadyDisliked = post.dislikes?.includes(userId);
-                const update = alreadyDisliked
-                  ? { $pull: { dislikes: userId } }                              // un-dislike
-                  : { $addToSet: { dislikes: userId }, $pull: { likes: userId } }; // dislike + remove like
+              const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+              if (!user) return res.status(404).json({ error: 'User not found' });
+              if (user.status !== 'active') return res.status(403).json({ error: 'Your account has been Restricted by the Admin' });
 
-                await forumCollection.updateOne({ _id: new ObjectId(req.params.id) }, update);
-                res.json({ disliked: !alreadyDisliked });
-              } catch (error) {
-                res.status(500).json({ error: 'Failed to update dislike' });
-              }
-            });
+              const post = await forumCollection.findOne({ _id: new ObjectId(req.params.id) });
+              if (!post) return res.status(404).json({ error: 'Post not found' });
+
+              const alreadyDisliked = post.dislikes?.includes(userId);
+              const update = alreadyDisliked
+                ? { $pull: { dislikes: userId } }
+                : { $addToSet: { dislikes: userId }, $pull: { likes: userId } };
+
+              await forumCollection.updateOne({ _id: new ObjectId(req.params.id) }, update);
+              res.json({ disliked: !alreadyDisliked });
+            } catch (error) {
+              res.status(500).json({ error: 'Failed to update dislike' });
+            }
+          });
 
             // PATCH add comment
-            app.patch('/api/forum/:id/comment', async (req, res) => {
-              try {
-                const { userId, userName, userImage, text } = req.body;
-                if (!text?.trim()) return res.status(400).json({ error: 'Comment text is required' });
+          app.patch('/api/forum/:id/comment', async (req, res) => {
+            try {
+              const { userId, userName, userImage, text } = req.body;
 
-                const comment = {
-                  _id: new ObjectId().toString(),
-                  userId,
-                  userName,
-                  userImage,
-                  text,
-                  createdAt: new Date(),
-                };
+              const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+              if (!user) return res.status(404).json({ error: 'User not found' });
+              if (user.status !== 'active') return res.status(403).json({ error: 'Your account has been restricted by Admin' });
 
-                await forumCollection.updateOne(
-                  { _id: new ObjectId(req.params.id) },
-                  { $push: { comments: comment } }
-                );
-                res.status(201).json(comment);
-              } catch (error) {
-                res.status(500).json({ error: 'Failed to add comment' });
-              }
-            });
+              if (!text?.trim()) return res.status(400).json({ error: 'Comment text is required' });
+
+              const comment = {
+                _id: new ObjectId().toString(),
+                userId,
+                userName,
+                userImage,
+                text,
+                createdAt: new Date(),
+              };
+
+              await forumCollection.updateOne(
+                { _id: new ObjectId(req.params.id) },
+                { $push: { comments: comment } }
+              );
+              res.status(201).json(comment);
+            } catch (error) {
+              res.status(500).json({ error: 'Failed to add comment' });
+            }
+          });
 
             // PATCH edit comment
             app.patch('/api/forum/:id/comment/:commentId', async (req, res) => {
