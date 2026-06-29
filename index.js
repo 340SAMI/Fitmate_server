@@ -37,6 +37,47 @@ async function run() {
     const purchaseCollection = database.collection('purchases');
     const favoriteCollection = database.collection("favorites");
     const userCollection= database.collection("user")
+    const applicationCollection = database.collection("application");
+    const sessionCollection = database.collection('session');
+
+
+    const verifyToken = async (req, res, next) => {
+
+        const authHeader = req.headers?.authorization;
+        if (!authHeader) {
+            return res.status(401).send({ message: 'unauthorized access' })
+        }
+
+        const token = authHeader.split(' ')[1]
+
+        if (!token) {
+            return res.status(401).send({ message: 'unauthorized access' })
+        }
+
+        const query = { token: token }
+        const session = await sessionCollection.findOne(query);
+
+        if (!session) {
+            return res.status(401).send({ message: 'unauthorized access' })
+        }
+
+        const userId = session.userId;
+
+
+        const userQuery = {
+            _id: userId
+        }
+
+        const user = await userCollection.findOne(userQuery);
+        if (!user) {
+            return res.status(401).send({ message: 'unauthorized access' })
+        }
+        // set data in the req object
+        req.user = user;
+        next();
+    }
+
+
 //class related
     app.post('/api/classes', async (req, res) => {
       try {
@@ -631,6 +672,123 @@ async function run() {
               }
             });
 
+
+            //application
+
+          app.post("/api/application", verifyToken, async (req, res) => {
+            try {
+              const { experience, specialty } = req.body;
+              if (!experience || !specialty) {
+                return res.status(400).json({ error: "Experience and specialty are required" });
+              }
+
+              const existing = await applicationCollection.findOne({
+                userId: req.user._id.toString(),
+                status: { $in: ["pending", "approved"] },
+              });
+
+              if (existing) {
+                return res.status(409).json({ error: "You already have an active application" });
+              }
+
+              const now = new Date();
+
+              await applicationCollection.insertOne({
+                userId: req.user._id.toString(),
+                fullName: req.user.name,
+                email: req.user.email,
+                experience: Number(experience),
+                specialty,
+                status: "pending",
+                feedback: null,
+                createdAt: now,
+                updatedAt: now,
+              });
+
+              res.status(201).json({ message: "Application submitted" });
+            } catch (err) {
+              console.error(err);
+              res.status(500).json({ error: "Server error" });
+            }
+          });
+
+          app.get("/api/application", verifyToken, async (req, res) => {
+            try {
+              if (req.user.role === "admin") {
+                const applications = await applicationCollection
+                  .find({})
+                  .sort({ createdAt: -1 })
+                  .toArray();
+                return res.status(200).json(applications);
+              }
+
+              const application = await applicationCollection.findOne(
+                { userId: req.user._id.toString() },
+                { sort: { createdAt: -1 } }
+              );
+
+              return res.status(200).json(application ?? {});
+            } catch (err) {
+              console.error(err);
+              res.status(500).json({ error: "Server error" });
+            }
+          });
+
+          app.patch("/api/application/:id", verifyToken, async (req, res) => {
+            try {
+              if (req.user.role !== "admin") {
+                return res.status(403).json({ error: "Forbidden" });
+              }
+
+              const { action, feedback } = req.body;
+
+              if (!["approve", "reject"].includes(action)) {
+                return res.status(400).json({ error: "Invalid action" });
+              }
+
+              if (action === "reject" && !feedback?.trim()) {
+                return res.status(400).json({ error: "Feedback is required when rejecting" });
+              }
+
+              const appId = new ObjectId(req.params.id);
+
+              const application = await applicationCollection.findOne({ _id: appId });
+              if (!application) {
+                return res.status(404).json({ error: "Application not found" });
+              }
+
+              const now = new Date();
+
+              if (action === "approve") {
+                await applicationCollection.updateOne(
+                  { _id: appId },
+                  { $set: { status: "approved", updatedAt: now } }
+                );
+
+                await userCollection.updateOne(
+                  { _id: new ObjectId(application.userId) },
+                  { $set: { role: "trainer" } }
+                );
+
+                return res.status(200).json({ message: "Application approved" });
+              }
+
+              if (action === "reject") {
+                await applicationCollection.updateOne(
+                  { _id: appId },
+                  { $set: { status: "rejected", feedback: feedback.trim(), updatedAt: now } }
+                );
+
+                return res.status(200).json({ message: "Application rejected" });
+              }
+            } catch (err) {
+              console.error(err);
+              res.status(500).json({ error: "Server error" });
+            }
+          });              
+
+
+         
 
     await client.db('admin').command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
